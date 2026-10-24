@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Adi's Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+
+<!-- ══════════════════════════════════════════════════════
+     FIREBASE — paste your 3 values below
+     Get them from: Firebase Console → Project Settings → Your apps → Web app
+══════════════════════════════════════════════════════ -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey:            "PASTE_YOUR_API_KEY_HERE",           // ← paste from Firebase
+    authDomain:        "adi-tracker-c6fb5.firebaseapp.com",
+    projectId:         "adi-tracker-c6fb5",
+    storageBucket:     "adi-tracker-c6fb5.appspot.com",
+    messagingSenderId: "PASTE_YOUR_SENDER_ID_HERE",         // ← paste from Firebase
+    appId:             "PASTE_YOUR_APP_ID_HERE"             // ← paste from Firebase
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getFirestore(app);
+
+  window.saveToCloud = async (stateObj) => {
+    try { await setDoc(doc(db,"tracker","adi"), stateObj); }
+    catch(e) { console.warn("Cloud save failed:", e); }
+  };
+  window.loadFromCloud = async () => {
+    try {
+      const snap = await getDoc(doc(db,"tracker","adi"));
+      if (snap.exists()) return snap.data();
+    } catch(e) { console.warn("Cloud load failed:", e); }
+    return null;
+  };
+  document.dispatchEvent(new Event('firebase-ready'));
+</script>
+
+<style>
+:root{--bg:#0d0d0f;--surface:#141416;--surface2:#1c1c20;--surface3:#242428;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);--text:#f0ede8;--text2:#9a9690;--text3:#5a5754;--accent:#c8f060;--teal:#4de8b0;--purple:#b090f8;--amber:#f8c040;--red:#f06060;--blue:#60b0f8;--radius:14px;--radius-sm:8px}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overscroll-behavior:none}
+.app{max-width:480px;margin:0 auto;padding:0 0 130px}
+
+/* ── HEADER ── */
+.header{padding:28px 20px 0}
+.header-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px}
+.header-name{font-family:'DM Serif Display',serif;font-size:26px;color:var(--text);letter-spacing:-0.5px}
+.header-name span{color:var(--accent);font-style:italic}
+.header-date{font-family:'DM Mono',monospace;font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;text-align:right;line-height:1.6}
+.streak-badge{display:inline-flex;align-items:center;gap:5px;background:rgba(200,240,96,0.1);border:1px solid rgba(200,240,96,0.25);border-radius:20px;padding:4px 10px;font-size:12px;color:var(--accent);font-weight:500;margin-top:10px}
+.cloud-dot{width:7px;height:7px;border-radius:50%;background:var(--text3);display:inline-block;margin-left:4px;transition:background 0.3s}
+.cloud-dot.synced{background:var(--teal)}
+
+/* ── PROGRESS RING ── */
+.day-progress{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 18px;margin:14px 20px 0}
+.ring-wrap{position:relative;width:60px;height:60px;flex-shrink:0}
+.ring-wrap svg{transform:rotate(-90deg)}
+.ring-bg{fill:none;stroke:var(--surface3);stroke-width:5}
+.ring-fill{fill:none;stroke:var(--accent);stroke-width:5;stroke-linecap:round;transition:stroke-dashoffset 0.6s ease}
+.ring-text{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:14px;font-weight:500}
+.day-stats{flex:1}
+.day-stats .lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:5px}
+.mini-stats{display:flex;gap:12px}
+.mini-stat .val{font-size:17px;font-weight:600;font-family:'DM Mono',monospace}
+.mini-stat .sub{font-size:10px;color:var(--text3)}
+
+/* ── NAV ── */
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;background:rgba(13,13,15,0.96);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border-top:1px solid var(--border);display:flex;padding:8px 0 env(safe-area-inset-bottom, 16px);z-index:100}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;border:none;background:none;cursor:pointer;padding:6px 1px;color:var(--text3);font-size:9px;font-family:'DM Sans',sans-serif;transition:color 0.2s}
+.nav-btn.active{color:var(--accent)}
+.nav-icon{font-size:17px}
+
+/* ── SECTIONS ── */
+.section{display:none;padding:14px 20px 0}
+.section.active{display:block;animation:fadeUp 0.22s ease}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+.sec-title{font-family:'DM Serif Display',serif;font-size:20px;color:var(--text);margin-bottom:14px}
+
+/* ── CARDS ── */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px}
+.card-label{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;font-family:'DM Mono',monospace;margin-bottom:10px}
+
+/* ── ALERTS ── */
+.alert{border-radius:var(--radius-sm);padding:11px 13px;margin-bottom:10px;font-size:12px;line-height:1.6}
+.alert-amber{background:rgba(248,192,64,0.07);border:1px solid rgba(248,192,64,0.25);color:var(--amber)}
+.alert-teal{background:rgba(77,232,176,0.06);border:1px solid rgba(77,232,176,0.2);color:var(--teal)}
+.alert-accent{background:rgba(200,240,96,0.05);border:1px solid rgba(200,240,96,0.2);color:var(--accent)}
+.alert-red{background:rgba(240,96,96,0.06);border:1px solid rgba(240,96,96,0.2);color:var(--red)}
+.alert-purple{background:rgba(176,144,248,0.06);border:1px solid rgba(176,144,248,0.2);color:var(--purple)}
+
+/* ── PHASE PILL ── */
+.phase-pill{display:inline-flex;align-items:center;gap:7px;border-radius:20px;padding:5px 12px;font-size:12px;font-weight:500;margin-bottom:12px;border:1px solid}
+.phase-1{background:rgba(200,240,96,0.08);border-color:rgba(200,240,96,0.25);color:var(--accent)}
+.phase-2{background:rgba(77,232,176,0.08);border-color:rgba(77,232,176,0.25);color:var(--teal)}
+.phase-3{background:rgba(176,144,248,0.08);border-color:rgba(176,144,248,0.25);color:var(--purple)}
+.phase-4{background:rgba(248,192,64,0.08);border-color:rgba(248,192,64,0.25);color:var(--amber)}
+.phase-dot{width:7px;height:7px;border-radius:50%;background:currentColor}
+
+/* ── TASKS ── */
+.task-group{margin-bottom:16px}
+.task-group-lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;font-family:'DM Mono',monospace;margin-bottom:7px;display:flex;align-items:center;gap:8px}
+.task-group-lbl::after{content:'';flex:1;height:1px;background:var(--border)}
+.task-item{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 13px;margin-bottom:6px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:all 0.2s;user-select:none}
+.task-item:active{transform:scale(0.98)}
+.task-item.done{background:rgba(200,240,96,0.04);border-color:rgba(200,240,96,0.15)}
+.task-check{width:21px;height:21px;border-radius:6px;border:1.5px solid var(--border2);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.2s}
+.task-item.done .task-check{background:var(--accent);border-color:var(--accent)}
+.chk-icon{font-size:12px;opacity:0;transition:opacity 0.15s}
+.task-item.done .chk-icon{opacity:1}
+.task-content{flex:1}
+.task-name{font-size:13px;font-weight:500;color:var(--text)}
+.task-item.done .task-name{color:var(--text3);text-decoration:line-through}
+.task-sub{font-size:11px;color:var(--text3);margin-top:2px}
+.tbadge{font-size:10px;padding:2px 7px;border-radius:20px;font-weight:500;flex-shrink:0}
+.tb-teal{background:rgba(77,232,176,0.12);color:var(--teal)}
+.tb-purple{background:rgba(176,144,248,0.12);color:var(--purple)}
+.tb-amber{background:rgba(248,192,64,0.12);color:var(--amber)}
+.tb-red{background:rgba(240,96,96,0.12);color:var(--red)}
+.tb-accent{background:rgba(200,240,96,0.12);color:var(--accent)}
+
+/* ── MVW ── */
+.mvw-card{background:rgba(176,144,248,0.06);border:1px solid rgba(176,144,248,0.2);border-radius:var(--radius);padding:13px 15px;margin-bottom:12px;cursor:pointer;transition:all 0.2s}
+.mvw-card:active{transform:scale(0.98)}
+.mvw-title{font-size:13px;font-weight:600;color:var(--purple);margin-bottom:4px}
+.mvw-sub{font-size:12px;color:var(--text3);line-height:1.5}
+.mvw-steps{display:none;margin-top:10px;padding-top:10px;border-top:1px solid rgba(176,144,248,0.2)}
+.mvw-steps.open{display:block}
+.mvw-step{font-size:12px;color:var(--text2);padding:3px 0}
+
+/* ── WORKOUT ── */
+.week-strip{display:flex;gap:5px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px;scrollbar-width:none}
+.week-strip::-webkit-scrollbar{display:none}
+.wd{flex-shrink:0;text-align:center;padding:7px 9px;border-radius:9px;background:var(--surface);border:1px solid var(--border)}
+.wd.today{background:rgba(200,240,96,0.1);border-color:rgba(200,240,96,0.3)}
+.wd.training{border-color:rgba(77,232,176,0.2)}
+.wd .d-lbl{font-size:10px;color:var(--text3);font-family:'DM Mono',monospace}
+.wd.today .d-lbl{color:var(--accent)}
+.wd .d-type{font-size:9px;color:var(--text3);margin-top:2px}
+.wd.training .d-type{color:var(--teal)}
+.wk-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px}
+.wk-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.wk-title{font-size:14px;font-weight:600;color:var(--text)}
+.wk-badge{font-size:11px;padding:3px 9px;border-radius:20px}
+.ex-item{display:flex;align-items:flex-start;gap:9px;padding:8px 0;border-bottom:1px solid var(--border)}
+.ex-item:last-child{border:none;padding-bottom:0}
+.ex-n{font-family:'DM Mono',monospace;font-size:10px;color:var(--text3);width:16px;padding-top:2px;flex-shrink:0}
+.ex-body{flex:1}
+.ex-name{font-size:13px;font-weight:500;color:var(--text)}
+.ex-sets{font-size:11px;color:var(--text3);margin-top:1px}
+.ex-tip{font-size:11px;color:var(--teal);margin-top:2px}
+.ex-log{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 5px;font-size:11px;color:var(--text2);font-family:'DM Mono',monospace;width:62px;text-align:center;flex-shrink:0;outline:none;margin-top:1px}
+.ex-log.logged{color:var(--accent);border-color:rgba(200,240,96,0.3)}
+
+/* ── MOBILITY ── */
+.mob-item{display:flex;gap:11px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border)}
+.mob-item:last-child{border:none}
+.mob-chk{width:19px;height:19px;border-radius:50%;border:1.5px solid var(--border2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;cursor:pointer;transition:all 0.2s;margin-top:1px}
+.mob-chk.done{background:var(--teal);border-color:var(--teal);color:#000}
+.mob-name{font-size:13px;font-weight:500;color:var(--text)}
+.mob-detail{font-size:11px;color:var(--text3);margin-top:2px}
+.mob-why{font-size:11px;color:var(--teal);margin-top:2px}
+
+/* ── DIET ── */
+.macro-summary{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.macro-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px}
+.mac-item{text-align:center}
+.mac-val{font-family:'DM Mono',monospace;font-size:17px;font-weight:500}
+.mac-lbl{font-size:10px;color:var(--text3);margin-top:2px}
+.mac-bar{height:3px;border-radius:2px;margin-top:5px;background:var(--surface3);overflow:hidden}
+.mac-fill{height:100%;border-radius:2px;transition:width 0.5s}
+
+/* ── SUPPLEMENTS ── */
+.supp-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:13px 15px;margin-bottom:9px;cursor:pointer;transition:all 0.2s;user-select:none}
+.supp-card:active{transform:scale(0.98)}
+.supp-card.taken-green{background:rgba(200,240,96,0.05);border-color:rgba(200,240,96,0.22)}
+.supp-card.taken-blue{background:rgba(96,176,248,0.05);border-color:rgba(96,176,248,0.22)}
+.supp-hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px}
+.supp-name{font-size:13px;font-weight:600;color:var(--text)}
+.supp-dose{font-size:11px;color:var(--text3);margin-top:2px}
+.supp-note{font-size:12px;color:var(--text3);line-height:1.5;margin-bottom:8px}
+.supp-tick{font-size:22px;flex-shrink:0;margin-left:6px}
+.supp-week{display:flex;gap:5px;padding-top:9px;border-top:1px solid var(--border)}
+.s-day{display:flex;flex-direction:column;align-items:center;gap:2px}
+.s-dot{width:28px;height:28px;border-radius:7px;border:1px solid var(--border2);background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:12px}
+.s-dot.ok{background:rgba(200,240,96,0.15);border-color:rgba(200,240,96,0.4)}
+.s-dot.ok-blue{background:rgba(96,176,248,0.15);border-color:rgba(96,176,248,0.4)}
+.s-lbl{font-size:9px;color:var(--text3);font-family:'DM Mono',monospace}
+.s-lbl.today{color:var(--accent)}
+
+/* ── SUGAR ── */
+.sugar-card{background:var(--surface);border:1px solid rgba(240,96,96,0.18);border-radius:var(--radius);padding:13px 15px;margin-bottom:12px}
+.sugar-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.sugar-title{font-size:13px;font-weight:600;color:var(--red)}
+.sugar-count{font-family:'DM Mono',monospace;font-size:12px}
+.sugar-note{font-size:11px;color:var(--text3);margin-bottom:9px}
+.sugar-btns{display:flex;gap:5px;flex-wrap:wrap}
+.s-btn{padding:5px 10px;border-radius:var(--radius-sm);border:1px solid rgba(240,96,96,0.2);background:var(--surface2);font-size:11px;color:var(--text3);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.2s}
+.s-btn.hit{background:rgba(240,96,96,0.12);border-color:rgba(240,96,96,0.35);color:var(--red)}
+
+/* ── FOOD LOG ── */
+.food-log{margin-bottom:14px}
+.food-entry{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 13px;margin-bottom:7px;display:flex;align-items:flex-start;justify-content:space-between;gap:9px}
+.fe-info{flex:1}
+.fe-name{font-size:13px;font-weight:500;color:var(--text)}
+.fe-macros{font-size:11px;color:var(--text3);margin-top:3px;font-family:'DM Mono',monospace}
+.fe-tip{font-size:11px;color:var(--teal);margin-top:3px}
+.fe-del{background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:0;line-height:1}
+.add-food{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+.add-lbl{font-size:10px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px}
+.food-row{display:flex;gap:7px;margin-bottom:9px}
+.food-input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 11px;font-size:13px;color:var(--text);font-family:'DM Sans',sans-serif;outline:none}
+.food-input::placeholder{color:var(--text3)}
+.food-input:focus{border-color:var(--border2)}
+.btn{background:var(--accent);color:#0d0d0f;border:none;border-radius:var(--radius-sm);padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s;white-space:nowrap}
+.btn:active{transform:scale(0.97)}
+.btn-ghost{background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+.btn-ghost:hover{background:var(--surface3);color:var(--text)}
+.sep{display:flex;align-items:center;gap:9px;margin:9px 0}
+.sep-line{flex:1;height:1px;background:var(--border)}
+.sep-txt{font-size:10px;color:var(--text3)}
+.upload-zone{border:1.5px dashed var(--border2);border-radius:var(--radius-sm);padding:18px;text-align:center;cursor:pointer;transition:all 0.2s;margin-bottom:8px}
+.upload-zone:hover{border-color:var(--accent);background:rgba(200,240,96,0.03)}
+.upload-icon{font-size:24px;margin-bottom:4px}
+.upload-txt{font-size:12px;color:var(--text3)}
+.upload-txt strong{color:var(--text2);display:block}
+#food-img-input{display:none}
+.img-preview{width:100%;border-radius:var(--radius-sm);margin-bottom:9px;display:none}
+.ai-spin{display:none;align-items:center;gap:7px;font-size:12px;color:var(--text3);padding:7px 0}
+.ai-spin.show{display:flex}
+.dots span{animation:blink 1.2s infinite;opacity:0.2}
+.dots span:nth-child(2){animation-delay:0.2s}
+.dots span:nth-child(3){animation-delay:0.4s}
+@keyframes blink{40%{opacity:1}}
+
+/* ── WATER ── */
+.water-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:13px 15px;margin-bottom:12px}
+.water-hdr{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.water-title{font-size:13px;font-weight:500}
+.water-val{font-family:'DM Mono',monospace;font-size:14px;color:var(--blue)}
+.water-cups{display:flex;gap:5px;flex-wrap:wrap}
+.w-cup{width:32px;height:32px;border-radius:7px;border:1.5px solid var(--border2);background:var(--surface2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;transition:all 0.2s}
+.w-cup.filled{background:rgba(96,176,248,0.15);border-color:rgba(96,176,248,0.4)}
+.w-cup:active{transform:scale(0.88)}
+
+/* ── RETINOL ── */
+.retinol-card{background:var(--surface);border:1px solid rgba(176,144,248,0.2);border-radius:var(--radius);padding:13px 15px;margin-bottom:10px}
+.retinol-title{font-size:12px;font-weight:600;color:var(--purple);margin-bottom:3px}
+.retinol-sub{font-size:11px;color:var(--text3);margin-bottom:9px}
+.ret-days{display:flex;gap:5px}
+.ret-day{width:34px;height:34px;border-radius:7px;border:1.5px solid rgba(176,144,248,0.22);background:var(--surface2);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:1px;transition:all 0.2s}
+.ret-day.used{background:rgba(176,144,248,0.15);border-color:rgba(176,144,248,0.5)}
+.ret-day .ri{font-size:13px}
+.ret-day .rl{font-size:9px;color:var(--text3);font-family:'DM Mono',monospace}
+
+/* ── SKIN STEPS ── */
+.skin-step{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:11px 13px;margin-bottom:6px;display:flex;align-items:center;gap:11px;cursor:pointer;transition:all 0.2s}
+.skin-step.done{background:rgba(77,232,176,0.04);border-color:rgba(77,232,176,0.2)}
+.s-num{font-family:'DM Mono',monospace;font-size:12px;color:var(--text3);width:18px;flex-shrink:0}
+.s-info{flex:1}
+.s-name{font-size:13px;font-weight:500;color:var(--text)}
+.skin-step.done .s-name{color:var(--text3);text-decoration:line-through}
+.s-note{font-size:11px;color:var(--text3);margin-top:2px}
+.s-ret{font-size:11px;color:var(--purple);margin-top:2px}
+.s-chk{width:19px;height:19px;border-radius:50%;border:1.5px solid var(--border2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;transition:all 0.2s}
+.skin-step.done .s-chk{background:var(--teal);border-color:var(--teal)}
+
+/* ── NOTES ── */
+.notes-wrap{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px}
+.notes-lbl{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:7px}
+.notes-input{width:100%;background:none;border:none;outline:none;color:var(--text);font-size:13px;font-family:'DM Sans',sans-serif;resize:none;min-height:65px;line-height:1.6}
+.notes-input::placeholder{color:var(--text3)}
+
+/* ── PROGRESS ── */
+.prog-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px}
+.prog-card-title{font-size:10px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;display:flex;justify-content:space-between}
+.week-chart{display:flex;align-items:flex-end;gap:5px;height:56px}
+.wk-bar{flex:1;background:var(--surface3);border-radius:3px 3px 0 0;min-height:4px;position:relative;transition:height 0.5s}
+.wk-bar.today{background:var(--accent)}
+.wk-bar .bl{position:absolute;bottom:-16px;left:50%;transform:translateX(-50%);font-size:8px;color:var(--text3);font-family:'DM Mono',monospace;white-space:nowrap}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:10px}
+.stat-box{background:var(--surface2);border-radius:var(--radius-sm);padding:11px}
+.stat-box .sv{font-family:'DM Mono',monospace;font-size:20px;font-weight:500}
+.stat-box .sl{font-size:10px;color:var(--text3);margin-top:2px}
+.ai-btn{width:100%;padding:13px;background:linear-gradient(135deg,rgba(200,240,96,0.1),rgba(77,232,176,0.1));border:1px solid rgba(200,240,96,0.22);border-radius:var(--radius);font-size:13px;font-weight:600;color:var(--accent);cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.2s;margin-bottom:10px}
+.ai-resp{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px;display:none}
+.ai-resp.show{display:block}
+.ai-resp-txt{font-size:13px;color:var(--text);line-height:1.75;white-space:pre-wrap}
+
+/* ── MILESTONES ── */
+.milestone-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;margin-bottom:10px}
+.ms-phase{font-size:12px;font-weight:600;margin-bottom:10px}
+.ms-item{display:flex;align-items:flex-start;gap:9px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;color:var(--text2)}
+.ms-item:last-child{border:none}
+.ms-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;margin-top:5px}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:95px;left:50%;transform:translateX(-50%) translateY(16px);background:var(--surface3);border:1px solid var(--border2);border-radius:20px;padding:7px 15px;font-size:12px;color:var(--text);opacity:0;transition:all 0.25s;pointer-events:none;z-index:300;white-space:nowrap}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="header-top">
+      <div><div class="header-name">Adi's <span>Tracker</span></div></div>
+      <div class="header-date" id="hdr-date"></div>
+    </div>
+    <div class="streak-badge">🔥 <span id="streak-num">0</span> day streak <span class="cloud-dot" id="cloud-dot" title="Sync status"></span></div>
+  </div>
+
+  <!-- Ring -->
+  <div class="day-progress">
+    <div class="ring-wrap">
+      <svg width="60" height="60" viewBox="0 0 60 60">
+        <circle class="ring-bg" cx="30" cy="30" r="25"/>
+        <circle class="ring-fill" id="ring-fill" cx="30" cy="30" r="25" stroke-dasharray="157" stroke-dashoffset="157"/>
+      </svg>
+      <div class="ring-text" id="ring-pct">0%</div>
+    </div>
+    <div class="day-stats">
+      <div class="lbl">Today's progress</div>
+      <div class="mini-stats">
+        <div class="mini-stat"><div class="val" id="s-done">0</div><div class="sub">Done</div></div>
+        <div class="mini-stat"><div class="val" id="s-kcal">0</div><div class="sub">kcal</div></div>
+        <div class="mini-stat"><div class="val" id="s-water">0</div><div class="sub">L H₂O</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ TODAY ══ -->
+  <div class="section active" id="sec-today">
+    <div style="margin-top:14px">
+      <div class="phase-pill" id="phase-pill"><div class="phase-dot"></div><span id="phase-label">Loading…</span></div>
+    </div>
+    <div class="alert alert-amber">⚠️ <strong>Wrist prep before every push session (60s):</strong> circles ×10 each way · palm-up/down forearm stretch 10s · prayer stretch 10s · slow knuckle push-ups ×10</div>
+    <div class="alert alert-accent">🎯 <strong>Posture reset:</strong> head back, shoulders down, pelvis neutral — every time you sit down</div>
+
+    <!-- MVW -->
+    <div class="mvw-card" onclick="toggleMVW()">
+      <div class="mvw-title">⚡ Minimum Viable Workout (busy / travel day)</div>
+      <div class="mvw-sub">Tap to expand · 1 round · ~8 min · streak protected</div>
+      <div class="mvw-steps" id="mvw-steps">
+        <div class="mvw-step">• 10 bodyweight squats</div>
+        <div class="mvw-step">• 10 incline push-ups (counter/wall)</div>
+        <div class="mvw-step">• 10 table/door rows</div>
+        <div class="mvw-step">• 30s plank</div>
+        <div class="mvw-step" style="color:var(--purple);margin-top:6px">Rule: <strong>never miss twice.</strong> One missed session = life. Two = a pattern.</div>
+      </div>
+    </div>
+
+    <div id="today-tasks"></div>
+  </div>
+
+  <!-- ══ WORKOUT ══ -->
+  <div class="section" id="sec-workout">
+    <div class="sec-title">Workout</div>
+    <div class="alert alert-amber" style="margin-bottom:10px">⚠️ Wrist prep 60s first. Use push-up handles or fists — never flat palms on the ground.</div>
+    <div id="wk-strip"></div>
+    <div id="wk-container"></div>
+  </div>
+
+  <!-- ══ MOBILITY ══ -->
+  <div class="section" id="sec-mobility">
+    <div class="sec-title">Mobility</div>
+    <div class="alert alert-teal">✦ Every day — including rest days. Posture changes faster than muscle builds.</div>
+    <div class="card" style="margin-bottom:10px;margin-top:2px">
+      <div class="card-label">Why this is your #1 priority</div>
+      <div style="font-size:12px;color:var(--text2);line-height:1.7">Forward head + rounded upper back + anterior pelvic tilt = belly protrudes + shoulders look narrower + you appear shorter. This routine targets all three directly. 5 min daily will visibly change your silhouette within 4 weeks — before new muscle shows.</div>
+    </div>
+    <div class="card" style="padding:14px 13px">
+      <div class="card-label">Daily routine — do in order</div>
+      <div id="mob-list"></div>
+    </div>
+    <div class="notes-wrap" style="margin-top:10px">
+      <div class="notes-lbl">Notes</div>
+      <textarea class="notes-input" id="mob-notes" placeholder="Any tightness? Pain? Areas to focus on?" oninput="saveMobNotes(this.value)"></textarea>
+    </div>
+  </div>
+
+  <!-- ══ DIET ══ -->
+  <div class="section" id="sec-diet">
+    <div class="sec-title">Diet & Supplements</div>
+
+    <div class="card-label" style="padding:0 0 6px">Daily supplements</div>
+    <div id="supp-creatine" class="supp-card" onclick="toggleSupp('creatine')">
+      <div class="supp-hdr">
+        <div><div class="supp-name">💊 Creatine Monohydrate</div><div class="supp-dose">3–5g daily — any time, with water</div></div>
+        <div class="supp-tick" id="tick-creatine">○</div>
+      </div>
+      <div class="supp-note">Every single day — no days off. Results appear in 3–4 weeks. Generic powder = same as expensive brands.</div>
+      <div class="supp-week" id="week-creatine"></div>
+    </div>
+    <div id="supp-omega3" class="supp-card" style="margin-bottom:14px" onclick="toggleSupp('omega3')">
+      <div class="supp-hdr">
+        <div><div class="supp-name" style="color:var(--blue)">🐟 Omega-3 / Fish Oil</div><div class="supp-dose" style="color:var(--blue)">1–2g EPA+DHA — with a meal</div></div>
+        <div class="supp-tick" id="tick-omega3">○</div>
+      </div>
+      <div class="supp-note">Reduces inflammation, supports muscle building, improves skin glow. 2× fatty fish/week works too.</div>
+      <div class="supp-week" id="week-omega3"></div>
+    </div>
+
+    <div class="sugar-card">
+      <div class="sugar-hdr">
+        <div class="sugar-title">🚫 Sugar log</div>
+        <div class="sugar-count" id="sugar-count" style="color:var(--teal)">✓ Clean</div>
+      </div>
+      <div class="sugar-note">Glycation = collagen damage = dull skin + slower fat loss. Zero is the goal.</div>
+      <div class="sugar-btns" id="sugar-btns"></div>
+    </div>
+
+    <div class="macro-summary">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px;color:var(--text2)">Today's macros</div>
+        <div style="font-family:'DM Mono',monospace;font-size:12px;color:var(--text3)"><span id="kcal-used">0</span> / <span id="kcal-target">2450</span> kcal</div>
+      </div>
+      <div class="macro-row">
+        <div class="mac-item"><div class="mac-val" style="color:var(--teal)" id="m-protein">0g</div><div class="mac-lbl">Protein / <span id="t-protein">140</span>g</div><div class="mac-bar"><div class="mac-fill" style="background:var(--teal);width:0%" id="bar-prot"></div></div></div>
+        <div class="mac-item"><div class="mac-val" style="color:var(--amber)" id="m-carbs">0g</div><div class="mac-lbl">Carbs</div><div class="mac-bar"><div class="mac-fill" style="background:var(--amber);width:0%" id="bar-carb"></div></div></div>
+        <div class="mac-item"><div class="mac-val" style="color:var(--purple)" id="m-fat">0g</div><div class="mac-lbl">Fat</div><div class="mac-bar"><div class="mac-fill" style="background:var(--purple);width:0%" id="bar-fat"></div></div></div>
+      </div>
+    </div>
+
+    <div class="food-log" id="food-list"></div>
+
+    <div class="add-food">
+      <div class="add-lbl">Log food or drink</div>
+      <div class="food-row">
+        <input class="food-input" id="food-text" placeholder="e.g. 3 eggs and rice, black coffee…" onkeydown="if(event.key==='Enter')analyzeFood()"/>
+        <button class="btn" onclick="analyzeFood()">Analyse</button>
+      </div>
+      <div class="ai-spin" id="food-spin">✦ Analysing<span class="dots"><span>.</span><span>.</span><span>.</span></span></div>
+      <div class="sep"><div class="sep-line"></div><div class="sep-txt">or upload photo</div><div class="sep-line"></div></div>
+      <input type="file" id="food-img-input" accept="image/*" capture="environment" onchange="handleImg(event)">
+      <div class="upload-zone" onclick="document.getElementById('food-img-input').click()">
+        <div class="upload-icon">📷</div>
+        <div class="upload-txt"><strong>Tap to photo or upload</strong>your meal</div>
+      </div>
+      <img class="img-preview" id="img-preview"/>
+      <div class="ai-spin" id="img-spin">✦ Reading photo<span class="dots"><span>.</span><span>.</span><span>.</span></span></div>
+    </div>
+
+    <div class="water-card">
+      <div class="water-hdr">
+        <div class="water-title">💧 Water — target 2.5L</div>
+        <div class="water-val" id="water-disp">0.0 / 2.5 L</div>
+      </div>
+      <div class="water-cups" id="water-cups"></div>
+    </div>
+
+    <div class="notes-wrap">
+      <div class="notes-lbl">Diet notes</div>
+      <textarea class="notes-input" id="diet-notes" placeholder="Energy, cravings, how you felt after eating…"></textarea>
+    </div>
+    <button class="btn" style="width:100%;margin-bottom:4px" onclick="saveDietNotes()">Save notes</button>
+  </div>
+
+  <!-- ══ SKIN ══ -->
+  <div class="section" id="sec-skin">
+    <div class="sec-title">Skincare</div>
+    <div class="retinol-card">
+      <div class="retinol-title">🌙 Retinol schedule (from Month 2)</div>
+      <div class="retinol-sub">Max 3×/week · never same night as exfoliant · always SPF next morning</div>
+      <div class="ret-days" id="ret-days"></div>
+      <div style="font-size:10px;color:var(--text3);margin-top:7px" id="ret-status"></div>
+    </div>
+    <div class="task-group">
+      <div class="task-group-lbl">Morning</div>
+      <div id="skin-am"></div>
+    </div>
+    <div class="task-group">
+      <div class="task-group-lbl">Evening</div>
+      <div id="skin-pm"></div>
+    </div>
+    <div class="alert alert-teal" style="margin-top:4px">✦ Start retinol at 0.025–0.05% · 1×/week first · build to 3×/week over 2 months · dryness in weeks 1–6 is normal</div>
+    <div class="alert alert-red" style="margin-top:6px">🚫 Sugar + skin: glycation stiffens collagen → dull, less elastic skin. Log sugar in Diet tab.</div>
+  </div>
+
+  <!-- ══ PROGRESS ══ -->
+  <div class="section" id="sec-progress">
+    <div class="sec-title">Progress</div>
+    <div class="prog-card">
+      <div class="prog-card-title">Weekly completion <span id="wk-pct" style="color:var(--accent)">–</span></div>
+      <div class="week-chart" id="wk-chart"></div>
+      <div style="margin-top:20px"></div>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-box"><div class="sv" style="color:var(--accent)" id="st-days">0</div><div class="sl">Days tracked</div></div>
+      <div class="stat-box"><div class="sv" style="color:var(--teal)" id="st-streak">0</div><div class="sl">Best streak</div></div>
+      <div class="stat-box"><div class="sv" style="color:var(--amber)" id="st-cal">–</div><div class="sl">Avg calories</div></div>
+      <div class="stat-box"><div class="sv" style="color:var(--purple)" id="st-prot">–</div><div class="sl">Avg protein</div></div>
+    </div>
+
+    <div id="milestones-section"></div>
+
+    <button class="ai-btn" onclick="generateReport()">✦ Generate AI Progress Report</button>
+    <div class="ai-resp" id="ai-area">
+      <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px">AI Report</div>
+      <div class="ai-resp-txt" id="ai-txt"></div>
+    </div>
+    <div class="prog-card">
+      <div class="prog-card-title">Data</div>
+      <button class="btn btn-ghost" style="width:100%;margin-bottom:7px" onclick="exportData()">Download JSON backup</button>
+      <button class="btn btn-ghost" style="width:100%" onclick="clearData()">Clear all data</button>
+    </div>
+  </div>
+
+</div><!-- /.app -->
+
+<!-- Nav -->
+<nav class="nav">
+  <button class="nav-btn active" onclick="showSec('today',this)"><div class="nav-icon">☀️</div>Today</button>
+  <button class="nav-btn" onclick="showSec('workout',this)"><div class="nav-icon">💪</div>Workout</button>
+  <button class="nav-btn" onclick="showSec('mobility',this)"><div class="nav-icon">🧘</div>Mobility</button>
+  <button class="nav-btn" onclick="showSec('diet',this)"><div class="nav-icon">🥗</div>Diet</button>
+  <button class="nav-btn" onclick="showSec('skin',this)"><div class="nav-icon">✨</div>Skin</button>
+  <button class="nav-btn" onclick="showSec('progress',this)"><div class="nav-icon">📊</div>Progress</button>
+</nav>
+<div class="toast" id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════
+// DATA — 12-MONTH PLAN
+// ══════════════════════════════════════════════════
+const PHASES = [
+  {
+    num:1, months:'M1–3', label:'Phase 1 — Foundation', cls:'phase-1',
+    calTarget:2450, protTarget:140, protMax:150,
+    days:['Mon','Wed','Sat'],
+    split:['Full-body A','Full-body B','Full-body A/B'],
+    workouts:{
+      A:{label:'Full-body A',badge:'Foundation',badgeCls:'tb-accent',
+        exercises:[
+          {name:'Box / chair squats',sets:'3 × 10–12',tip:'Sit back to chair, drive through heels'},
+          {name:'Incline push-ups',sets:'3 × 8–12',tip:'Hands on counter/wall — fists or handles to protect wrists'},
+          {name:'Table rows / band rows',sets:'3 × 8–12',tip:'Lie under sturdy table, pull chest to edge'},
+          {name:'Glute bridges',sets:'3 × 12–15',tip:'Pause 2s at top — fixes anterior pelvic tilt'},
+          {name:'Plank (forearm)',sets:'3 × 20–30s',tip:'Core stability — wrist-safe'},
+          {name:'Dead bug',sets:'2 × 8 each side',tip:'Slow and controlled — lower back flat to floor'},
+        ]},
+      B:{label:'Full-body B',badge:'Foundation',badgeCls:'tb-accent',
+        exercises:[
+          {name:'Reverse lunges',sets:'3 × 8 each leg',tip:'Step back, keep front knee over ankle'},
+          {name:'Pike push-ups (elevated)',sets:'3 × 6–10',tip:'Hands on sofa/step, hips high — shoulder builder'},
+          {name:'Band pull-aparts / towel rows',sets:'3 × 15',tip:'Pull band/towel apart at chest height — rear delts'},
+          {name:'Hip hinge / RDL pattern',sets:'3 × 12',tip:'Hinge at hips, soft knees, feel hamstring stretch'},
+          {name:'Side plank',sets:'2 × 15–20s each',tip:'Stack feet or stagger them'},
+          {name:'Bird dog',sets:'2 × 8 each side',tip:'Opposite arm and leg — slow, stable'},
+        ]},
+    }
+  },
+  {
+    num:2, months:'M4–6', label:'Phase 2 — Build', cls:'phase-2',
+    calTarget:2600, protTarget:145, protMax:160,
+    days:['Mon','Wed','Sat'],
+    split:['Push + Legs','Pull + Core','Full-body'],
+    workouts:{
+      A:{label:'Push + Legs',badge:'V-shape fuel',badgeCls:'tb-teal',
+        exercises:[
+          {name:'Bulgarian split squats',sets:'3 × 8 each',tip:'Back foot on chair — add backpack weight when easy'},
+          {name:'Push-ups (handles or fists)',sets:'3 × max reps',tip:'Full push-ups, knees first if needed'},
+          {name:'Pike push-ups (feet elevated)',sets:'3 × 6–10',tip:'Feet on sofa — shoulders'},
+          {name:'Calf raises',sets:'3 × 15–20',tip:'Single-leg when double gets easy'},
+          {name:'Hollow-body hold',sets:'3 × 20s',tip:'Lower back pressed to floor, arms overhead'},
+        ]},
+      B:{label:'Pull + Core',badge:'V-shape priority',badgeCls:'tb-purple',
+        exercises:[
+          {name:'Pull-ups / negatives',sets:'4 × max',tip:'★ Most important exercise. Negatives: jump up, 5s slow lower'},
+          {name:'Inverted rows (under table)',sets:'3 × 8–12',tip:'Feet elevated = harder. Wide grip for lats.'},
+          {name:'Band pull-aparts + face pulls',sets:'3 × 15',tip:'Rear delts = posture + shoulder width'},
+          {name:'Superman holds',sets:'3 × 20s',tip:'Lower back + glutes — squeeze at top'},
+          {name:'Hanging / lying leg raises',sets:'3 × 10',tip:'Control the lowering phase'},
+        ]},
+      C:{label:'Full-body Strength',badge:'Compound',badgeCls:'tb-accent',
+        exercises:[
+          {name:'Squats — tempo 3s down',sets:'3 × 12',tip:'Add backpack for resistance'},
+          {name:'Archer / decline push-ups',sets:'3 × 6–8',tip:'Archer: shift weight side to side'},
+          {name:'Single-arm band / backpack row',sets:'3 × 10 each',tip:'One arm at a time — more lat activation'},
+          {name:'Glute bridge march',sets:'3 × 10 each',tip:'Hold bridge, alternate lifting legs'},
+          {name:'Side plank with reach',sets:'2 × 10 each',tip:'Top arm sweeps under body and back up'},
+        ]},
+    }
+  },
+  {
+    num:3, months:'M7–9', label:'Phase 3 — Develop', cls:'phase-3',
+    calTarget:2550, protTarget:150, protMax:160,
+    days:['Mon','Wed','Sat'],
+    split:['Upper Push','Lower + Core','Upper Pull'],
+    workouts:{
+      A:{label:'Upper Push',badge:'Hard variations',badgeCls:'tb-purple',
+        exercises:[
+          {name:'Decline / archer push-ups',sets:'4 × 6–8',tip:'Feet elevated on chair for decline'},
+          {name:'Pike push-ups → handstand holds',sets:'3 × 20–30s',tip:'Only if wrists are 100% pain-free'},
+          {name:'Dips (between chairs)',sets:'3 × 8',tip:'Bench dips if wrists complain'},
+          {name:'Band overhead press',sets:'3 × 12',tip:'Stand on band, press overhead'},
+          {name:'Diamond push-ups',sets:'3 × 8–10',tip:'Hands form diamond under chest'},
+        ]},
+      B:{label:'Lower + Core',badge:'Strength base',badgeCls:'tb-amber',
+        exercises:[
+          {name:'Bulgarian split squats (loaded)',sets:'4 × 8 each',tip:'Backpack with books — progressive overload'},
+          {name:'Single-leg glute bridges',sets:'3 × 12 each',tip:'One leg extended, drive through heel'},
+          {name:'Cossack squats',sets:'3 × 6 each',tip:'Great hip mobility too — go slow'},
+          {name:'Single-leg calf raises',sets:'3 × 12 each',tip:'Use wall for balance'},
+          {name:'Hanging leg raises / reverse crunch',sets:'3 × 12',tip:'Control the descent'},
+          {name:'Hollow rock',sets:'3 × 20s',tip:'Rock gently — maintain lower back contact'},
+        ]},
+      C:{label:'Upper Pull — V-shape',badge:'★ Priority',badgeCls:'tb-teal',
+        exercises:[
+          {name:'Pull-ups',sets:'4 × 5–8',tip:'Add backpack weight if 8 reps feel easy'},
+          {name:'Wide inverted rows',sets:'4 × 10',tip:'Wider grip = more lat activation'},
+          {name:'Chin-ups (underhand grip)',sets:'3 × 6',tip:'Underhand = more bicep, still great for lats'},
+          {name:'Face pulls + pull-aparts',sets:'3 × 20',tip:'Rear delts every session — non-negotiable'},
+          {name:'Band lat pulldown',sets:'3 × 15',tip:'Anchor band above, pull elbows to sides'},
+        ]},
+    }
+  },
+  {
+    num:4, months:'M10–12', label:'Phase 4 — Reveal', cls:'phase-4',
+    calTarget:2250, protTarget:155, protMax:165,
+    days:['Mon','Wed','Sat'],
+    split:['Push + Legs','Pull + Core','Full-body + Finisher'],
+    workouts:{
+      A:{label:'Push + Legs (hard)',badge:'Max effort',badgeCls:'tb-amber',
+        exercises:[
+          {name:'Pistol squat progressions',sets:'4 × 4–6 each',tip:'Use door handle for balance → full pistol'},
+          {name:'Archer push-ups',sets:'4 × 6 each',tip:'Slide side to side — pseudo-planche prep'},
+          {name:'Pike push-ups → HSPU progressions',sets:'3 × max',tip:'Wall-supported if ready'},
+          {name:'Weighted calf raises',sets:'3 × 15',tip:'Backpack loaded'},
+          {name:'L-sit tuck hold',sets:'3 × 15s',tip:'Between two chairs — core + shoulder strength'},
+        ]},
+      B:{label:'Pull + Core (V-shape)',badge:'★ Priority',badgeCls:'tb-teal',
+        exercises:[
+          {name:'Weighted pull-ups',sets:'4 × 5–8',tip:'Backpack with weight — serious lat builder'},
+          {name:'Chest-to-bar pull-ups',sets:'3 × max',tip:'Pull until chest touches the bar'},
+          {name:'Wide inverted rows',sets:'3 × 12',tip:'Feet elevated for full difficulty'},
+          {name:'Face pulls + band dislocates',sets:'3 × 20',tip:'Rear delts + shoulder health'},
+          {name:'Dragon flag progressions',sets:'3 × 5–8',tip:'Tuck version first — core strength'},
+        ]},
+      C:{label:'Full-body + Finisher',badge:'Conditioning',badgeCls:'tb-red',
+        exercises:[
+          {name:'Circuit × 3–4 rounds',sets:'Minimal rest',tip:''},
+          {name:'Jump squats ×10',sets:'',tip:'Explosive — drive through heels'},
+          {name:'Push-ups ×10 (handles)',sets:'',tip:'Full range'},
+          {name:'Inverted rows ×10',sets:'',tip:'Fast but controlled'},
+          {name:'Mountain climbers ×20',sets:'',tip:'On handles — wrist-safe'},
+          {name:'Hollow hold ×15s',sets:'',tip:'Catch your breath'},
+        ]},
+    }
+  }
+];
+
+const DAILY_TASKS = {
+  morning:[
+    {id:'water-wake',name:'Drink water on waking',sub:'250ml immediately',badge:'tb-accent'},
+    {id:'creatine',name:'Take creatine (3–5g)',sub:'Mix in any drink — every single day',badge:'tb-purple'},
+    {id:'breakfast',name:'Eat breakfast with protein',sub:'3 eggs + oats · or Greek yogurt + oats + berries',badge:'tb-teal'},
+    {id:'no-sugar-drinks',name:'No sugary drinks today',sub:'Water / tea / black coffee only',badge:'tb-red'},
+    {id:'skincare-am',name:'Morning skincare (5 min)',sub:'Cleanse → Vit C → Moisturiser → SPF',badge:'tb-teal'},
+    {id:'posture',name:'Posture reset',sub:'Head back · shoulders down · pelvis neutral',badge:'tb-purple'},
+  ],
+  training:[
+    {id:'wrist-prep',name:'Wrist prep (60s)',sub:'Circles → forearm stretch → prayer stretch → knuckle push-ups ×10',badge:'tb-amber'},
+    {id:'mobility',name:'Daily mobility routine',sub:'See Mobility tab — do every day including rest days',badge:'tb-accent'},
+    {id:'workout',name:"Complete today's workout",sub:'Check Workout tab',badge:'tb-purple'},
+    {id:'post-protein',name:'Post-workout protein within 60 min',sub:'Eggs, chicken, yogurt, or milk',badge:'tb-teal'},
+  ],
+  evening:[
+    {id:'water-2.5',name:'Hit 2.5L water today',sub:'Check water tracker in Diet tab',badge:'tb-accent'},
+    {id:'dinner-prot',name:'Dinner with lean protein',sub:'Chicken / fish / eggs + big veg portion',badge:'tb-teal'},
+    {id:'no-sugar-eve',name:'No added sugar today ✓',sub:'Check sauces, snacks, condiments',badge:'tb-red'},
+    {id:'skincare-pm',name:'Evening skincare (5 min)',sub:'Cleanse → Niacinamide or Retinol → Moisturise',badge:'tb-teal'},
+    {id:'sleep-11',name:'In bed by 11pm',sub:'Sleep = muscle growth + skin repair',badge:'tb-purple'},
+  ]
+};
+
+const MOBILITY_STEPS = [
+  {id:'m1',name:'Chin tucks',detail:'Slide head straight back — not down. Hold 3s. ×10 reps.',why:'Fixes forward head posture — also do hourly at desk'},
+  {id:'m2',name:'Wall angels',detail:'Back flat to wall. Slide arms up and down. ×10 reps.',why:'Trains correct shoulder position + scapular control'},
+  {id:'m3',name:'Doorway chest stretch',detail:'Arms at 90°, lean into doorframe. 2 × 30s each side.',why:'Opens tight chest from desk work — fixes rounded shoulders'},
+  {id:'m4',name:'Cat–cow',detail:'On all fours, alternate full arch and full round. ×8 slow reps.',why:'Spine mobility — counters stiffness from sitting'},
+  {id:'m5',name:'Hip flexor stretch (kneeling lunge)',detail:'Back knee on floor, front foot forward. Lean in. 30s each side.',why:'Fixes anterior pelvic tilt — reduces belly protrusion'},
+  {id:'m6',name:'Thoracic extension over chair/towel',detail:'Towel rolled under upper back, arms overhead. 1 min.',why:'Directly counters rounded upper back — biggest posture fix'},
+  {id:'m7',name:'Glute bridge hold',detail:'Hips up, squeeze hard. 3 × 20s.',why:'Activates glutes — counteracts pelvic tilt from prolonged sitting'},
+];
+
+const SKIN_STEPS = {
+  am:[
+    {id:'sa1',name:'Gentle cleanser',note:'Cool/lukewarm water. No bar soap on face.'},
+    {id:'sa2',name:'Vitamin C serum',note:'2–3 drops on damp skin. Brightens + evens tone.',ret:'Critical after retinol nights — never skip SPF'},
+    {id:'sa3',name:'Lightweight moisturiser',note:'Non-comedogenic. Glycerin or hyaluronic acid.'},
+    {id:'sa4',name:'SPF 30+ sunscreen ★',note:'Every morning. Year-round. Non-negotiable.',ret:'Extra important day after retinol'},
+  ],
+  pm:[
+    {id:'sp1',name:'Cleanser',note:'Removes sweat, sunscreen, pollution from the day.'},
+    {id:'sp2',name:'Niacinamide OR retinol',note:'Niacinamide most nights. Retinol 1–3×/week from Month 2.',ret:'Never retinol + exfoliant on same night'},
+    {id:'sp3',name:'Richer moisturiser',note:'Heavier than morning. Skin repairs while you sleep.'},
+  ]
+};
+
+const SUGAR_SOURCES = ['Bubble tea','Soda / Cola','Fruit juice','Dessert','Sugary sauce','Sweet snack'];
+const DAY_NAMES_W = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+
+// ══════════════════════════════════════════════════
+// STATE
+// ══════════════════════════════════════════════════
+const STORE = 'adi_tracker_v5';
+let state = {startDate:null, days:{}, streak:0, bestStreak:0, retinolWeek:{}};
+
+function loadState(){
+  try{ const s=localStorage.getItem(STORE); if(s) state=JSON.parse(s); }catch(e){}
+  if(!state.startDate) state.startDate = todayKey();
+  if(!state.retinolWeek) state.retinolWeek={};
+}
+function saveState(){
+  localStorage.setItem(STORE, JSON.stringify(state));
+  if(window.saveToCloud){ window.saveToCloud(JSON.parse(JSON.stringify(state))).then(()=>{ setCloud(true); }); }
+}
+function setCloud(ok){ const d=document.getElementById('cloud-dot'); if(d){ d.classList.toggle('synced',ok); d.title=ok?'Synced to cloud':'Not synced'; } }
+function todayKey(){ return new Date().toISOString().slice(0,10); }
+function weekKey(){ const d=new Date(),day=d.getDay(),diff=d.getDate()-day+(day===0?-6:1); return new Date(d.setDate(diff)).toISOString().slice(0,10); }
+function getDay(k){ if(!state.days[k]) state.days[k]={tasks:{},food:[],water:0,notes:'',mobility:{},workoutNotes:'',skinAm:{},skinPm:{},workout:{},supps:{},sugar:{},mobNotes:''}; return state.days[k]; }
+
+// ══════════════════════════════════════════════════
+// PHASE DETECTION
+// ══════════════════════════════════════════════════
+function getPhase(){
+  const start=new Date(state.startDate), now=new Date();
+  const months=Math.floor((now-start)/(1000*60*60*24*30.44));
+  if(months<3) return PHASES[0];
+  if(months<6) return PHASES[1];
+  if(months<9) return PHASES[2];
+  return PHASES[3];
+}
+function updatePhasePill(){
+  const p=getPhase();
+  const pill=document.getElementById('phase-pill');
+  if(pill){ pill.className='phase-pill '+p.cls; }
+  const lbl=document.getElementById('phase-label');
+  if(lbl) lbl.textContent=p.label+' · '+p.months;
+  // update calorie target display
+  const kt=document.getElementById('kcal-target'); if(kt) kt.textContent=p.calTarget;
+  const tp=document.getElementById('t-protein'); if(tp) tp.textContent=p.protTarget;
+}
+
+// ══════════════════════════════════════════════════
+// TODAY TASKS
+// ══════════════════════════════════════════════════
+function renderTasks(){
+  const d=getDay(todayKey()), el=document.getElementById('today-tasks');
+  const groups={morning:'Morning',training:'Training & Mobility',evening:'Evening'};
+  let html='';
+  Object.entries(groups).forEach(([g,lbl])=>{
+    html+=`<div class="task-group"><div class="task-group-lbl">${lbl}</div>`;
+    DAILY_TASKS[g].forEach(t=>{
+      const done=d.tasks[t.id];
+      html+=`<div class="task-item ${done?'done':''}" onclick="toggleTask('${t.id}',this)">
+        <div class="task-check"><span class="chk-icon">✓</span></div>
+        <div class="task-content"><div class="task-name">${t.name}</div><div class="task-sub">${t.sub}</div></div>
+        <span class="tbadge ${t.badge}">${t.badge==='tb-red'?'sugar':t.badge==='tb-amber'?'⚠':t.badge==='tb-teal'?'body':'★'}</span>
+      </div>`;
+    });
+    html+='</div>';
+  });
+  el.innerHTML=html;
+}
+function toggleTask(id,el){
+  const d=getDay(todayKey()); d.tasks[id]=!d.tasks[id];
+  el.classList.toggle('done',d.tasks[id]);
+  saveState(); updateRing();
+  showToast(d.tasks[id]?'✓ Done!':'Unmarked');
+}
+function toggleMVW(){ document.getElementById('mvw-steps').classList.toggle('open'); }
+
+// ══════════════════════════════════════════════════
+// WORKOUT
+// ══════════════════════════════════════════════════
+function getDayOfWeek(){ return new Date().getDay(); } // 0=Sun
+function getWorkoutForToday(){
+  const p=getPhase(), dow=getDayOfWeek();
+  // Mon=1 → Day A, Wed=3 → Day B, Sat=6 → Day C (or A if only 2)
+  const keys=Object.keys(p.workouts);
+  if(dow===1) return {wk:p.workouts[keys[0]],phase:p};
+  if(dow===3) return {wk:p.workouts[keys[1]],phase:p};
+  if(dow===6) return {wk:p.workouts[keys[keys.length-1]],phase:p};
+  return {wk:null,phase:p}; // rest day
+}
+function renderWorkout(){
+  const p=getPhase(), dow=getDayOfWeek(), d=getDay(todayKey());
+  const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const trainingDays=[1,3,6];
+  let strip='<div class="week-strip">';
+  days.forEach((dn,i)=>{
+    const isTrain=trainingDays.includes(i);
+    const isToday=i===dow;
+    strip+=`<div class="wd ${isToday?'today':''} ${isTrain?'training':''}"><div class="d-lbl">${dn}</div><div class="d-type">${isTrain?p.split[trainingDays.indexOf(i)]||'Train':'Rest'}</div></div>`;
+  });
+  strip+='</div>';
+  document.getElementById('wk-strip').innerHTML=strip;
+
+  const {wk}=getWorkoutForToday();
+  let content='';
+  if(!wk){
+    content=`<div class="card">
+      <div class="card-label">Rest Day</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.8">
+        ✦ 30–45 min brisk walk — Zone 2 cardio, best fat-loss tool<br>
+        ✦ 10-min mobility routine (Mobility tab)<br>
+        ✦ Hip flexor + chest stretch — targets your posture issues<br>
+        ✦ One full rest day — no guilt
+      </div>
+    </div>`;
+  } else {
+    const exHtml=wk.exercises.map((ex,i)=>{
+      const logged=d.workout[`ex_${i}`]||'';
+      return `<div class="ex-item">
+        <div class="ex-n">${i+1}</div>
+        <div class="ex-body"><div class="ex-name">${ex.name}</div><div class="ex-sets">${ex.sets}</div>${ex.tip?`<div class="ex-tip">${ex.tip}</div>`:''}</div>
+        ${ex.sets?`<input class="ex-log ${logged?'logged':''}" id="ex-${i}" value="${logged}" placeholder="reps" oninput="logEx(${i},this.value)" onclick="this.select()">`:``}
+      </div>`;
+    }).join('');
+    content=`<div class="wk-card">
+      <div class="wk-header"><div class="wk-title">${wk.label}</div><span class="tbadge ${wk.badgeCls}">${wk.badge}</span></div>
+      ${exHtml}
+    </div>`;
+  }
+  content+=`<div class="notes-wrap"><div class="notes-lbl">Workout notes</div>
+    <textarea class="notes-input" id="wk-notes" placeholder="How did it feel? Pain? Energy?" oninput="saveWkNotes(this.value)">${d.workoutNotes||''}</textarea></div>`;
+  document.getElementById('wk-container').innerHTML=content;
+}
+function logEx(i,v){ const d=getDay(todayKey()); d.workout[`ex_${i}`]=v; const el=document.getElementById(`ex-${i}`); if(el) el.classList.toggle('logged',!!v); saveState(); }
+function saveWkNotes(v){ getDay(todayKey()).workoutNotes=v; saveState(); }
+
+// ══════════════════════════════════════════════════
+// MOBILITY
+// ══════════════════════════════════════════════════
+function renderMobility(){
+  const d=getDay(todayKey());
+  document.getElementById('mob-list').innerHTML=MOBILITY_STEPS.map(s=>{
+    const done=(d.mobility||{})[s.id];
+    return `<div class="mob-item">
+      <div class="mob-chk ${done?'done':''}" onclick="toggleMob('${s.id}',this)">${done?'✓':''}</div>
+      <div class="mob-info"><div class="mob-name">${s.name}</div><div class="mob-detail">${s.detail}</div><div class="mob-why">↳ ${s.why}</div></div>
+    </div>`;
+  }).join('');
+  const n=document.getElementById('mob-notes'); if(n) n.value=getDay(todayKey()).mobNotes||'';
+}
+function toggleMob(id,el){
+  const d=getDay(todayKey()); if(!d.mobility) d.mobility={};
+  d.mobility[id]=!d.mobility[id];
+  el.classList.toggle('done',d.mobility[id]); el.textContent=d.mobility[id]?'✓':'';
+  saveState(); updateRing(); showToast(d.mobility[id]?'✓ Done!':'Unmarked');
+}
+function saveMobNotes(v){ getDay(todayKey()).mobNotes=v; saveState(); }
+
+// ══════════════════════════════════════════════════
+// SUPPLEMENTS
+// ══════════════════════════════════════════════════
+function toggleSupp(key){
+  const d=getDay(todayKey()); if(!d.supps) d.supps={};
+  d.supps[key]=!d.supps[key];
+  saveState(); renderSupps(); updateRing();
+  showToast(d.supps[key]?`✓ ${key==='creatine'?'Creatine':'Omega-3'} logged!`:'Removed');
+}
+function renderSupps(){
+  const today=new Date(), todayIdx=today.getDay()===0?6:today.getDay()-1;
+  ['creatine','omega3'].forEach(key=>{
+    const d=getDay(todayKey()), taken=(d.supps||{})[key];
+    const card=document.getElementById(`supp-${key}`);
+    if(card){ card.classList.toggle('taken-green',taken&&key==='creatine'); card.classList.toggle('taken-blue',taken&&key==='omega3'); }
+    const tick=document.getElementById(`tick-${key}`); if(tick) tick.textContent=taken?'✅':'○';
+    const wkEl=document.getElementById(`week-${key}`); if(!wkEl) return;
+    let html='';
+    for(let i=0;i<7;i++){
+      const dd=new Date(today); dd.setDate(today.getDate()-todayIdx+i);
+      const dk=dd.toISOString().slice(0,10);
+      const dayData=state.days[dk], dayTaken=dayData&&(dayData.supps||{})[key];
+      const isToday=i===todayIdx;
+      const dotCls=dayTaken?(key==='creatine'?'ok':'ok-blue'):'';
+      html+=`<div class="s-day"><div class="s-dot ${dotCls}">${dayTaken?(key==='creatine'?'💊':'🐟'):'·'}</div><div class="s-lbl ${isToday?'today':''}">${DAY_NAMES_W[i]}</div></div>`;
+    }
+    wkEl.innerHTML=html;
+  });
+}
+
+// ══════════════════════════════════════════════════
+// SUGAR
+// ══════════════════════════════════════════════════
+function renderSugar(){
+  const d=getDay(todayKey()), count=Object.values(d.sugar||{}).filter(Boolean).length;
+  const el=document.getElementById('sugar-count');
+  if(el){ el.textContent=count===0?'✓ Clean':count+' hit'+(count>1?'s':''); el.style.color=count===0?'var(--teal)':'var(--red)'; }
+  const btns=document.getElementById('sugar-btns');
+  if(btns) btns.innerHTML=SUGAR_SOURCES.map(s=>{ const hit=(d.sugar||{})[s]; return`<button class="s-btn ${hit?'hit':''}" onclick="toggleSugar('${s}')">${hit?'✗ ':''}${s}</button>`; }).join('');
+}
+function toggleSugar(name){
+  const d=getDay(todayKey()); if(!d.sugar) d.sugar={};
+  d.sugar[name]=!d.sugar[name];
+  saveState(); renderSugar(); showToast(d.sugar[name]?'Logged — aim zero tomorrow':'Removed');
+}
+
+// ══════════════════════════════════════════════════
+// DIET / FOOD AI
+// ══════════════════════════════════════════════════
+function getPhaseContext(){
+  const p=getPhase();
+  return `Adi: 184cm/78kg, already lean (not overweight), goal = muscle building + V-shape physique. Current phase: ${p.label}. Daily targets: ${p.calTarget} kcal, ${p.protTarget}–${p.protMax}g protein. Plate rule: palm protein + fist carbs + two fists veg + thumb fats.`;
+}
+async function analyzeFood(){
+  const inp=document.getElementById('food-text'), text=inp.value.trim(); if(!text) return;
+  document.getElementById('food-spin').classList.add('show');
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,
+        system:`Nutrition analyst. Respond ONLY with valid JSON (no markdown): {"name":"...","calories":number,"protein":number,"carbs":number,"fat":number,"sugar":number,"note":"..."}\n${getPhaseContext()}\n"sugar"=added sugar grams. "note"=1 short advice sentence.`,
+        messages:[{role:'user',content:`Analyse: ${text}`}]})});
+    const data=await res.json();
+    addFood(JSON.parse(data.content[0].text.replace(/```json|```/g,'').trim()));
+    inp.value=''; showToast('✓ Food logged!');
+  }catch(e){ showToast('Could not analyse — try again'); }
+  document.getElementById('food-spin').classList.remove('show');
+}
+async function handleImg(event){
+  const file=event.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=async(e)=>{
+    const b64=e.target.result.split(',')[1];
+    const prev=document.getElementById('img-preview'); prev.src=e.target.result; prev.style.display='block';
+    document.getElementById('img-spin').classList.add('show');
+    try{
+      const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:400,
+          system:`Nutrition analyst. Respond ONLY with valid JSON: {"name":"...","calories":number,"protein":number,"carbs":number,"fat":number,"sugar":number,"note":"..."}\n${getPhaseContext()}`,
+          messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:file.type,data:b64}},{type:'text',text:'Analyse this meal — macros per serving shown?'}]}]})});
+      const data=await res.json();
+      addFood(JSON.parse(data.content[0].text.replace(/```json|```/g,'').trim()));
+      showToast('✓ Meal analysed!');
+    }catch(e){ showToast('Could not read image'); }
+    document.getElementById('img-spin').classList.remove('show');
+    event.target.value='';
+  };
+  reader.readAsDataURL(file);
+}
+function addFood(item){ const d=getDay(todayKey()); d.food.push({...item,time:new Date().toTimeString().slice(0,5)}); saveState(); renderFood(); updateMacros(); updateRing(); }
+function renderFood(){
+  const d=getDay(todayKey()), el=document.getElementById('food-list');
+  if(!d.food.length){ el.innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:10px 0">No food logged yet today</div>'; return; }
+  el.innerHTML=d.food.map((f,i)=>`<div class="food-entry"><div class="fe-info"><div class="fe-name">${f.name} <span style="font-size:10px;color:var(--text3)">${f.time||''}</span></div><div class="fe-macros">${f.calories} kcal · P:${f.protein}g · C:${f.carbs}g · F:${f.fat}g${f.sugar>0?` · 🍬${f.sugar}g`:''}</div>${f.note?`<div class="fe-tip">✦ ${f.note}</div>`:''}</div><button class="fe-del" onclick="delFood(${i})">×</button></div>`).join('');
+}
+function delFood(i){ const d=getDay(todayKey()); d.food.splice(i,1); saveState(); renderFood(); updateMacros(); updateRing(); }
+function updateMacros(){
+  const d=getDay(todayKey()), p=getPhase();
+  const t=d.food.reduce((a,f)=>({c:a.c+(f.calories||0),p:a.p+(f.protein||0),cb:a.cb+(f.carbs||0),f:a.f+(f.fat||0)}),{c:0,p:0,cb:0,f:0});
+  document.getElementById('kcal-used').textContent=Math.round(t.c);
+  document.getElementById('m-protein').textContent=Math.round(t.p)+'g';
+  document.getElementById('m-carbs').textContent=Math.round(t.cb)+'g';
+  document.getElementById('m-fat').textContent=Math.round(t.f)+'g';
+  document.getElementById('bar-prot').style.width=Math.min(100,t.p/p.protTarget*100)+'%';
+  document.getElementById('bar-carb').style.width=Math.min(100,t.cb/280*100)+'%';
+  document.getElementById('bar-fat').style.width=Math.min(100,t.f/75*100)+'%';
+  document.getElementById('s-kcal').textContent=Math.round(t.c);
+}
+function saveDietNotes(){ getDay(todayKey()).notes=document.getElementById('diet-notes').value; saveState(); showToast('Saved!'); }
+
+// ══════════════════════════════════════════════════
+// WATER
+// ══════════════════════════════════════════════════
+function renderWater(){
+  const d=getDay(todayKey()), el=document.getElementById('water-cups'); el.innerHTML='';
+  for(let i=0;i<10;i++){ const b=document.createElement('button'); b.className='w-cup'+(i<d.water?' filled':''); b.textContent='💧'; b.onclick=()=>tapWater(i); el.appendChild(b); }
+  const L=(d.water*.25).toFixed(1);
+  document.getElementById('water-disp').textContent=`${L} / 2.5 L`;
+  document.getElementById('s-water').textContent=L;
+}
+function tapWater(i){ const d=getDay(todayKey()); d.water=i<d.water?i:i+1; saveState(); renderWater(); updateRing(); }
+
+// ══════════════════════════════════════════════════
+// RETINOL
+// ══════════════════════════════════════════════════
+function renderRetinol(){
+  const wk=weekKey(); if(!state.retinolWeek[wk]) state.retinolWeek[wk]={};
+  const week=state.retinolWeek[wk], used=Object.values(week).filter(Boolean).length;
+  document.getElementById('ret-days').innerHTML=DAY_NAMES_W.map(day=>{
+    const u=week[day];
+    return `<div class="ret-day ${u?'used':''}" onclick="toggleRetinol('${day}','${wk}')"><div class="ri">${u?'🌙':'○'}</div><div class="rl">${day}</div></div>`;
+  }).join('');
+  const st=document.getElementById('ret-status');
+  if(st){ st.textContent=used===0?'Not used this week':used<3?`${used}× this week — max 3×`:'✓ Max 3× reached — rest nights use Niacinamide'; st.style.color=used>=3?'var(--purple)':'var(--text3)'; }
+}
+function toggleRetinol(day,wk){
+  if(!state.retinolWeek[wk]) state.retinolWeek[wk]={};
+  const week=state.retinolWeek[wk], used=Object.values(week).filter(Boolean).length;
+  if(!week[day]&&used>=3){ showToast('Max 3× per week'); return; }
+  week[day]=!week[day]; saveState(); renderRetinol();
+  showToast(week[day]?'🌙 Retinol night logged':'Removed');
+}
+
+// ══════════════════════════════════════════════════
+// SKINCARE
+// ══════════════════════════════════════════════════
+function renderSkin(){
+  const d=getDay(todayKey());
+  ['am','pm'].forEach(t=>{
+    const el=document.getElementById(`skin-${t}`), key=`skin${t==='am'?'Am':'Pm'}`;
+    el.innerHTML=SKIN_STEPS[t].map((s,i)=>{
+      const done=(d[key]||{})[s.id];
+      return `<div class="skin-step ${done?'done':''}" onclick="toggleSkin('${t}','${s.id}',this)">
+        <div class="s-num">${i+1}</div>
+        <div class="s-info"><div class="s-name">${s.name}</div><div class="s-note">${s.note}</div>${s.ret?`<div class="s-ret">🌙 ${s.ret}</div>`:''}</div>
+        <div class="s-chk">${done?'✓':''}</div>
+      </div>`;
+    }).join('');
+  });
+}
+function toggleSkin(t,id,el){
+  const d=getDay(todayKey()), key=`skin${t==='am'?'Am':'Pm'}`;
+  if(!d[key]) d[key]={}; d[key][id]=!d[key][id];
+  el.classList.toggle('done',d[key][id]); el.querySelector('.s-chk').textContent=d[key][id]?'✓':'';
+  saveState(); updateRing(); showToast(d[key][id]?'✓ Done!':'Unmarked');
+}
+
+// ══════════════════════════════════════════════════
+// RING + STREAK
+// ══════════════════════════════════════════════════
+function updateRing(){
+  const d=getDay(todayKey());
+  const totalT=Object.values(DAILY_TASKS).flat().length;
+  const totalM=MOBILITY_STEPS.length, totalS=SKIN_STEPS.am.length+SKIN_STEPS.pm.length;
+  const total=totalT+totalM+totalS;
+  let done=Object.values(d.tasks||{}).filter(Boolean).length;
+  done+=Object.values(d.mobility||{}).filter(Boolean).length;
+  done+=Object.values(d.skinAm||{}).filter(Boolean).length;
+  done+=Object.values(d.skinPm||{}).filter(Boolean).length;
+  const pct=total>0?done/total:0;
+  document.getElementById('ring-fill').style.strokeDashoffset=157-pct*157;
+  document.getElementById('ring-pct').textContent=Math.round(pct*100)+'%';
+  document.getElementById('s-done').textContent=done;
+  calcStreak();
+}
+function calcStreak(){
+  let s=0; const now=new Date(), tot=Object.values(DAILY_TASKS).flat().length;
+  for(let i=0;i<365;i++){
+    const k=new Date(now-i*86400000).toISOString().slice(0,10);
+    const day=state.days[k]; if(!day) break;
+    if(Object.values(day.tasks||{}).filter(Boolean).length<Math.floor(tot*.4)) break;
+    s++;
+  }
+  state.streak=s; if(s>(state.bestStreak||0)) state.bestStreak=s;
+  document.getElementById('streak-num').textContent=s; saveState();
+}
+
+// ══════════════════════════════════════════════════
+// PROGRESS
+// ══════════════════════════════════════════════════
+function renderProgress(){
+  const days=DAY_NAMES_W, today=new Date(), todayIdx=today.getDay()===0?6:today.getDay()-1;
+  const tot=Object.values(DAILY_TASKS).flat().length;
+  const chartEl=document.getElementById('wk-chart'); chartEl.innerHTML='';
+  let pcts=[];
+  for(let i=0;i<7;i++){
+    const dd=new Date(today); dd.setDate(today.getDate()-todayIdx+i);
+    const k=dd.toISOString().slice(0,10), dd2=state.days[k];
+    const done=dd2?Object.values(dd2.tasks||{}).filter(Boolean).length:0;
+    const pct=tot>0?done/tot:0; pcts.push(pct);
+    const bar=document.createElement('div');
+    bar.className='wk-bar'+(i===todayIdx?' today':'');
+    bar.style.height=Math.max(4,pct*52)+'px'; bar.style.flexGrow='1';
+    bar.innerHTML=`<span class="bl">${days[i]}</span>`;
+    chartEl.appendChild(bar);
+  }
+  const avg=pcts.reduce((a,b)=>a+b,0)/7;
+  document.getElementById('wk-pct').textContent=Math.round(avg*100)+'%';
+  const all=Object.values(state.days);
+  document.getElementById('st-days').textContent=all.length;
+  document.getElementById('st-streak').textContent=state.bestStreak||0;
+  const cals=all.filter(d=>d.food&&d.food.length).map(d=>d.food.reduce((s,f)=>s+(f.calories||0),0));
+  document.getElementById('st-cal').textContent=cals.length?Math.round(cals.reduce((a,b)=>a+b,0)/cals.length):'-';
+  const prots=all.filter(d=>d.food&&d.food.length).map(d=>d.food.reduce((s,f)=>s+(f.protein||0),0));
+  document.getElementById('st-prot').textContent=prots.length?Math.round(prots.reduce((a,b)=>a+b,0)/prots.length)+'g':'-';
+  renderMilestones();
+}
+
+function renderMilestones(){
+  const p=getPhase(), el=document.getElementById('milestones-section');
+  const allMilestones = [
+    {phase:1,color:'var(--accent)',items:['12 sessions done — habit forming','Incline push-ups moving to lower surface','Plank 45s','Wrist pain reduced or gone','Daily posture routine feels automatic']},
+    {phase:2,color:'var(--teal)',items:['First pull-up or strong 5s negatives','15–20 full push-ups unbroken','Plank 60s · hollow hold 30s','Visibly straighter side-profile posture','Backpack added for extra resistance']},
+    {phase:3,color:'var(--purple)',items:['5–8 strict pull-ups','Archer or feet-elevated push-ups','Clear upper-back + shoulder development','Touch toes comfortably · deep squat hold','Waist looks narrower by comparison']},
+    {phase:4,color:'var(--amber)',items:['8–12 strict pull-ups','Defined shoulders + visible back width','Flatter midsection, upright posture','Consistent year of training — the real trophy']},
+  ];
+  el.innerHTML=allMilestones.map(m=>{
+    const isCurrent=m.phase===p.num;
+    return `<div class="milestone-card" style="${isCurrent?'border-color:'+m.color+';background:'+m.color.replace(')',',0.04)').replace('var(','rgba('):''}">
+      <div class="ms-phase" style="color:${m.color}">Phase ${m.phase} Milestones ${isCurrent?'← current':''}</div>
+      ${m.items.map(item=>`<div class="ms-item" style="color:${isCurrent?'var(--text2)':'var(--text3)'}"><div class="ms-dot" style="background:${m.color}"></div>${item}</div>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════
+// AI REPORT
+// ══════════════════════════════════════════════════
+async function generateReport(){
+  document.getElementById('ai-area').classList.add('show');
+  document.getElementById('ai-txt').textContent='Generating report…';
+  const p=getPhase();
+  const summary=Object.entries(state.days).slice(-7).map(([date,d])=>({
+    date,tasks:Object.values(d.tasks||{}).filter(Boolean).length,
+    mobility:Object.values(d.mobility||{}).filter(Boolean).length,
+    calories:d.food?d.food.reduce((s,f)=>s+(f.calories||0),0):0,
+    protein:d.food?d.food.reduce((s,f)=>s+(f.protein||0),0):0,
+    sugar_hits:Object.values(d.sugar||{}).filter(Boolean).length,
+    water:((d.water||0)*.25).toFixed(1)+'L',
+    creatine:(d.supps||{}).creatine||false,
+    omega3:(d.supps||{}).omega3||false,
+  }));
+  try{
+    const res=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:800,
+        system:`You are Adi's personal transformation coach. Adi: 184cm/78kg, already lean, goal = V-shape muscular body + bright skin. Has forward head posture + anterior pelvic tilt. Currently in ${p.label} (${p.months}). Target: ${p.calTarget} kcal, ${p.protTarget}–${p.protMax}g protein daily. 3 training days/week (Mon/Wed/Sat). Taking creatine + omega-3 daily. Reducing sugar for body + skin.\n\nAnalyse the 7-day data and give:\n1) What's going well (specific + data-driven)\n2) What needs attention (honest)\n3) One concrete adjustment for this phase\n\nBe direct, motivating, under 220 words.`,
+        messages:[{role:'user',content:`Last 7 days:\n${JSON.stringify(summary,null,2)}\n\nProgress report please.`}]})});
+    const data=await res.json();
+    document.getElementById('ai-txt').textContent=data.content[0].text;
+  }catch(e){ document.getElementById('ai-txt').textContent='Could not generate — check connection.'; }
+}
+
+// ══════════════════════════════════════════════════
+// HEADER
+// ══════════════════════════════════════════════════
+function updateHeader(){
+  const now=new Date();
+  const D=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  document.getElementById('hdr-date').innerHTML=`${D[now.getDay()]}<br>${now.getDate()} ${M[now.getMonth()]} ${now.getFullYear()}`;
+}
+
+// ══════════════════════════════════════════════════
+// NAV
+// ══════════════════════════════════════════════════
+function showSec(name,btn){
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById(`sec-${name}`).classList.add('active');
+  btn.classList.add('active');
+  if(name==='workout') renderWorkout();
+  if(name==='mobility') renderMobility();
+  if(name==='skin'){ renderSkin(); renderRetinol(); }
+  if(name==='diet'){ renderSugar(); renderSupps(); renderFood(); updateMacros(); }
+  if(name==='progress') renderProgress();
+}
+
+// ══════════════════════════════════════════════════
+// EXPORT / CLEAR
+// ══════════════════════════════════════════════════
+function exportData(){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));
+  a.download=`adi-tracker-${todayKey()}.json`; a.click();
+}
+function clearData(){ if(confirm('Clear all data? Cannot be undone.')){ localStorage.removeItem(STORE); location.reload(); } }
+
+// ══════════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════════
+function showToast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2000); }
+
+// ══════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════
+async function init(){
+  loadState();
+  updateHeader(); updatePhasePill();
+  renderTasks(); renderFood(); updateMacros(); renderWater(); renderSupps(); updateRing();
+
+  // Try cloud sync
+  if(window.loadFromCloud){
+    try{
+      const cloud=await window.loadFromCloud();
+      if(cloud&&cloud.startDate){
+        state=cloud; localStorage.setItem(STORE,JSON.stringify(state));
+        renderTasks(); renderFood(); updateMacros(); renderWater(); renderSupps(); updateRing();
+        setCloud(true);
+        showToast('☁ Synced from cloud');
+      }
+    }catch(e){ console.warn('Cloud load failed',e); }
+  }
+}
+
+document.addEventListener('firebase-ready', init);
+setTimeout(init, 800); // fallback if Firebase not configured yet
+</script>
+</body>
+</html>
